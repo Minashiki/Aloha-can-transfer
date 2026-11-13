@@ -60,3 +60,7 @@ Thumbs.db
 tmp/
 scratch/
 *.tmp
+
+# ---- 仅本地保留的规划文档（只有 Claude 可写，不入 git）----
+docs/PLAN.md
+docs/WORKFLOW.md
