@@ -1,0 +1,62 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+.conda/
+
+# ---- 数据集（robomimic hdf5、重渲染示范等）----
+data/
+datasets/
+*.hdf5
+*.h5
+*.npz
+*.zarr/
+
+# ---- 训练产物：checkpoint、日志 ----
+checkpoints/
+ckpt/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+runs/
+logs/
+wandb/
+outputs/
+*.log
+
+# ---- 实验结果：视频、图片、曲线 ----
+results/
+videos/
+figures/
+*.mp4
+*.gif
+*.avi
+
+# ---- 外部下载的资产（robosuite 原始资产等，按需放这里）----
+third_party/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.cursor/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- 临时文件 ----
+tmp/
+scratch/
+*.tmp
