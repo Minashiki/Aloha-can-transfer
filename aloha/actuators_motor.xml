@@ -1,0 +1,11 @@
+<mujoco>
+  <actuator>
+    <motor name="left/waist" joint="left/waist" gear="1" ctrlrange="-10 10"/>
+    <motor name="left/shoulder" joint="left/shoulder" gear="1" ctrlrange="-20 20"/>
+    <motor name="left/elbow" joint="left/elbow" gear="1" ctrlrange="-20 20"/>
+    <motor name="left/forearm_roll" joint="left/forearm_roll" gear="1" ctrlrange="-10 10"/>
+    <motor name="left/wrist_angle" joint="left/wrist_angle" gear="1" ctrlrange="-10 10"/>
+    <motor name="left/wrist_rotate" joint="left/wrist_rotate" gear="1" ctrlrange="-4 4"/>
+    <position name="left/gripper" joint="left/left_finger" kp="2000" ctrlrange="0.002 0.037" forcerange="-20 20"/>
+  </actuator>
+</mujoco>

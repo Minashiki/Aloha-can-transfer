@@ -1,7 +1,7 @@
 <mujoco model="aloha">
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
 
-  <option cone="elliptic" impratio="10"/>
+  <option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="10"/>
 
   <asset>
     <material name="black" rgba="0.15 0.15 0.15 1"/>
@@ -25,27 +25,27 @@
       <joint axis="0 1 0"/>
       <site group="4"/>
       <default class="waist">
-        <joint axis="0 0 1" range="-3.14158 3.14158" damping="5.76"/>
+        <joint axis="0 0 1" range="-3.14158 3.14158" damping="1.0" actuatorfrcrange="-10 10"/>
         <position ctrlrange="-3.14158 3.14158" kp="43"/>
       </default>
       <default class="shoulder">
-        <joint range="-1.85005 1.25664" armature="0.395" frictionloss="2.0" damping="20.0"/>
+        <joint range="-1.85005 1.25664" armature="0.395" frictionloss="2.0" damping="2.0" actuatorfrcrange="-20 20"/>
         <position ctrlrange="-1.85005 1.25664" kp="265"/>
       </default>
       <default class="elbow">
-        <joint range="-1.76278 1.6057" armature="0.383" frictionloss="1.15" damping="18.49"/>
+        <joint range="-1.76278 1.6057" armature="0.383" frictionloss="1.15" damping="2.0" actuatorfrcrange="-20 20"/>
         <position ctrlrange="-1.76278 1.6057" kp="227"/>
       </default>
       <default class="forearm_roll">
-        <joint axis="1 0 0" range="-3.14158 3.14158" armature="0.14" damping="6.78"/>
+        <joint axis="1 0 0" range="-3.14158 3.14158" armature="0.14" damping="0.8" actuatorfrcrange="-10 10"/>
         <position ctrlrange="-3.14158 3.14158" kp="78"/>
       </default>
       <default class="wrist_angle">
-        <joint range="-1.8675 2.23402" armature="0.008" damping="6.28"/>
+        <joint range="-1.8675 2.23402" armature="0.008" damping="0.8" actuatorfrcrange="-10 10"/>
         <position ctrlrange="-1.8675 2.23402" kp="37"/>
       </default>
       <default class="wrist_rotate">
-        <joint axis="1 0 0" range="-3.14158 3.14158" damping="1.2"/>
+        <joint axis="1 0 0" range="-3.14158 3.14158" damping="0.3" actuatorfrcrange="-4 4"/>
         <position ctrlrange="-3.14158 3.14158" kp="10.4"/>
       </default>
       <default class="finger">
@@ -138,6 +138,19 @@
                     mass="0.251652" diaginertia="0.000689546 0.000650316 0.000468142"/>
                   <joint name="left/wrist_rotate" class="wrist_rotate"/>
                   <site name="left/gripper" pos="0.13 0 -.003" group="5"/>
+                  <!--
+                    left/tcp is the only tool center point. Its origin is the
+                    midpoint of the two fingertip pads, measured in this link
+                    at finger q = 0.037: average left/left_g0..g2, average
+                    left/right_g0..g2, then the midpoint of those two centers.
+                    The fingers move symmetrically, so the midpoint does not
+                    move when the gripper opens or closes.
+                    Axes are this link's axes. +X is the approach direction
+                    (the direction the fingers point toward the object). +Y
+                    points to the robot's left when +X points forward. +Z
+                    completes the right-handed frame.
+                  -->
+                  <site name="left/tcp" pos="0.143809 0.000003 -0.003550" group="5"/>
                   <body name="left/gripper_base" euler="0 1.57 -1.57" pos="0.035 0 0">
                     <site name="ee_center_site" pos="0.13 0 0" size="0.005" rgba="0 1 0 1"/>
                     <inertial pos="0.000182154 -0.0341589 -0.0106026" quat="0.435286 0.557074 -0.551539 0.442718"
@@ -198,6 +211,4 @@
 
 
 
-  <include file="joint_position_actuators.xml"/>
-<!--  <include file="keyframe_ctrl.xml"/>-->
 </mujoco>

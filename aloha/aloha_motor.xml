@@ -1,0 +1,5 @@
+<mujoco model="aloha_motor">
+  <include file="aloha.xml"/>
+  <include file="actuators_motor.xml"/>
+  <include file="../assets/scene/pick_place_can.xml"/>
+</mujoco>

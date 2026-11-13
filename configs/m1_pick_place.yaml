@@ -1,0 +1,69 @@
+# M1 pick-and-place. Positions are in the left/base_link frame unless noted.
+actuator: position
+gravity_compensation: false
+control_hz: 20
+physics_hz: 500
+tcp_site: left/tcp
+gripper_open: 0.037
+# Close command is below the scaled can radius (0.0225 m) so the fingers keep pushing.
+gripper_close: 0.015
+# Ready pose: top-down, above the gap between the bins. left/tcp is near base (0.277, 0, 0.182).
+home_q: [0.0, -0.24632554, 0.35635693, 0.0, 1.46044343, 0.0]
+
+velocity_limit:
+  left/waist: 2.0
+  left/shoulder: 2.0
+  left/elbow: 2.0
+  left/forearm_roll: 3.0
+  left/wrist_angle: 3.0
+  left/wrist_rotate: 3.0
+
+ik:
+  damping: 0.05
+  max_iters: 40
+  pos_tol: 0.001
+  rot_tol: 0.01
+  rot_weight: 0.4
+
+camera:
+  height: 96
+  width: 96
+
+# Body-origin height that puts the collision-cylinder bottom on the bin floor.
+# Local bottom is geom_pos_z - half_height = -0.00059 - 0.03604.
+can_rest_z: 0.03663
+
+# Right-bin cells. fixed_1 and random use the +X+Y cell. fixed_2 uses the
+# opposite -X-Y cell. half_extents are the inner cell, and ±2 cm in z around
+# the resting cylinder center.
+target_cells:
+  fixed_1:
+    center: [0.336, -0.080, 0.03604]
+    half_extents: [0.0324, 0.0414, 0.02]
+  fixed_2:
+    center: [0.264, -0.170, 0.03604]
+    half_extents: [0.0324, 0.0414, 0.02]
+  random:
+    center: [0.336, -0.080, 0.03604]
+    half_extents: [0.0324, 0.0414, 0.02]
+
+success:
+  vel_thresh: 0.01
+  hold_steps: 250
+  require_release: true
+
+# place_pos is a point inside that mode's target cell.
+modes:
+  fixed_1:
+    can_pos: [0.30, 0.125, 0.03663]
+    can_quat: [1, 0, 0, 0]
+    place_pos: [0.336, -0.080, 0.03604]
+  fixed_2:
+    can_pos: [0.27, 0.165, 0.03663]
+    can_quat: [1, 0, 0, 0]
+    place_pos: [0.254, -0.180, 0.03604]
+
+# Can-center samples stay inside the left bin after insetting by the can radius.
+random_can:
+  xy_low: [0.26, 0.07]
+  xy_high: [0.34, 0.18]

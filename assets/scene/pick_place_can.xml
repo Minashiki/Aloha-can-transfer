@@ -1,0 +1,99 @@
+<mujoco model="pick_place_can">
+  <!--
+    Floor, bin geometry, materials, and the agentview camera are adapted from
+    robosuite v1.5.1 PickPlaceCan (BinsArena + Can). The robot base sits on a
+    table whose top is z=0, matching the bottom of the base mesh. Bins are
+    uniformly scaled by 0.36 and moved into the left arm's top-down workspace.
+    See assets/scene/README.md.
+  -->
+  <asset>
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1="0.9 0.9 1" rgb2="0.2 0.3 0.4" width="256" height="256"/>
+    <texture name="texplane" type="2d" file="textures/light-gray-floor-tile.png"/>
+    <material name="floorplane" texture="texplane" texrepeat="2 2" texuniform="true" reflectance="0.01" shininess="0" specular="0"/>
+    <texture name="tex-ceramic" type="cube" file="textures/ceramic.png"/>
+    <material name="table_ceramic" texture="tex-ceramic" texrepeat="1 1" reflectance="0" shininess="0" specular="0.2"/>
+    <texture name="tex-steel-brushed" type="cube" file="textures/steel-brushed.png"/>
+    <material name="table_legs_metal" texture="tex-steel-brushed" texrepeat="1 1" reflectance="0.8" shininess="0.8"/>
+    <texture name="tex-light-wood" type="2d" file="textures/light-wood.png"/>
+    <texture name="tex-dark-wood" type="2d" file="textures/dark-wood.png"/>
+    <material name="light-wood" texture="tex-light-wood" texrepeat="5 5" texuniform="true" reflectance="0"/>
+    <material name="dark-wood" texture="tex-dark-wood" texrepeat="5 5" texuniform="true" reflectance="0"/>
+    <mesh name="can_mesh" file="meshes/can.msh" scale="0.9 0.9 0.9"/>
+    <texture name="tex-can" type="2d" file="textures/soda.png"/>
+    <material name="coke" texture="tex-can" texrepeat="5 5" texuniform="true" reflectance="0.7"/>
+  </asset>
+
+  <visual>
+    <headlight ambient="0.55 0.55 0.55" diffuse="0.65 0.65 0.65" specular="0.15 0.15 0.15"/>
+  </visual>
+
+  <worldbody>
+    <geom name="floor" type="plane" pos="0 0 -0.45" size="1.6 1.6 0.02" material="floorplane" condim="3"/>
+
+    <light pos="0.25 0 1.1" dir="0 0 -1" directional="true" diffuse="0.55 0.55 0.55" specular="0.15 0.15 0.15" castshadow="false"/>
+    <light pos="0.05 0.35 0.7" dir="0.25 -0.25 -1" diffuse="0.4 0.4 0.4" specular="0.1 0.1 0.1" castshadow="false"/>
+    <light pos="0.05 -0.35 0.7" dir="0.25 0.25 -1" diffuse="0.4 0.4 0.4" specular="0.1 0.1 0.1" castshadow="false"/>
+
+    <!-- Table under the arm. Top at z=0. Ceramic box and steel legs from table_arena, resized. -->
+    <body name="table" pos="-0.10 0 -0.02">
+      <geom name="table_collision" type="box" size="0.22 0.16 0.02" material="table_ceramic" friction="1 0.005 0.0001"/>
+      <geom name="table_leg1" type="cylinder" pos="0.16 0.12 -0.225" size="0.012 0.205" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="table_leg2" type="cylinder" pos="-0.16 0.12 -0.225" size="0.012 0.205" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="table_leg3" type="cylinder" pos="-0.16 -0.12 -0.225" size="0.012 0.205" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="table_leg4" type="cylinder" pos="0.16 -0.12 -0.225" size="0.012 0.205" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+    </body>
+
+    <!--
+      Left bin (pick), from the robot's point of view. Uniform scale 0.36 of
+      robosuite bin1. Body z puts the floor top at z=0. World position is the
+      base-frame center (0.30, 0.125) plus the base_link pose.
+    -->
+    <body name="bin_left" pos="0.258982 0.12486 -0.0072">
+      <geom name="bin_left_floor" type="box" size="0.072 0.09 0.0072" material="light-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_left_wall_y+" type="box" pos="0 0.09 0.018" size="0.0756 0.0036 0.018" material="light-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_left_wall_y-" type="box" pos="0 -0.09 0.018" size="0.0756 0.0036 0.018" material="light-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_left_wall_x+" type="box" pos="0.072 0 0.018" size="0.0036 0.09 0.018" material="light-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_left_wall_x-" type="box" pos="-0.072 0 0.018" size="0.0036 0.09 0.018" material="light-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_left_leg1" type="cylinder" pos="0.054 0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_left_leg2" type="cylinder" pos="-0.054 0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_left_leg3" type="cylinder" pos="-0.054 -0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_left_leg4" type="cylinder" pos="0.054 -0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+    </body>
+
+    <!-- Right bin (place), scaled bin2, including the cross divider that makes four cells. -->
+    <body name="bin_right" pos="0.258982 -0.12514 -0.0072">
+      <geom name="bin_right_floor" type="box" size="0.072 0.09 0.0072" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_wall_y+" type="box" pos="0 0.09 0.018" size="0.0756 0.0036 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_wall_y-" type="box" pos="0 -0.09 0.018" size="0.0756 0.0036 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_wall_x+" type="box" pos="0.072 0 0.018" size="0.0036 0.09 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_wall_x-" type="box" pos="-0.072 0 0.018" size="0.0036 0.09 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_div_y" type="box" pos="0 0 0.018" size="0.072 0.0036 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_div_x" type="box" pos="0 0 0.018" size="0.0036 0.09 0.018" material="dark-wood" friction="1 0.005 0.0001"/>
+      <geom name="bin_right_leg1" type="cylinder" pos="0.054 0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_right_leg2" type="cylinder" pos="-0.054 0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_right_leg3" type="cylinder" pos="-0.054 -0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <geom name="bin_right_leg4" type="cylinder" pos="0.054 -0.072 -0.225" size="0.008 0.2178" material="table_legs_metal" contype="0" conaffinity="0" group="1"/>
+      <!-- Robosuite Can target is the +x,+y cell of bin2. Marker only. -->
+      <site name="place_target" pos="0.036 0.045 0.05" size="0.004" rgba="0 0 0 0"/>
+    </body>
+
+    <body name="can" pos="0.258982 0.12486 0.036626">
+      <freejoint name="can_joint"/>
+      <!-- Visual mesh kept; collision is a cylinder because the convex mesh crept under the grip. -->
+      <geom name="can_visual" type="mesh" mesh="can_mesh" material="coke" contype="0" conaffinity="0" group="0" mass="0"/>
+      <geom name="can_collision" type="cylinder" size="0.02251 0.03604" pos="0 0 -0.00059" density="100" friction="1 0.005 0.0001" condim="4" solref="0.01 1" solimp="0.95 0.99 0.001" group="3" rgba="0.8 0.1 0.1 0.3"/>
+    </body>
+
+    <!--
+      agentview starts from the bins_arena camera and is pulled back and up so
+      both bin rims, the can, and the gripper during a grasp stay in frame.
+      +X of the camera points right in the image, +Y points up, and the camera
+      looks along -Z toward (0.26, 0, 0.14).
+    -->
+    <camera name="agentview" mode="fixed" pos="0.71 -0.18 0.416" xyaxes="0.37139068 0.92847669 0 -0.45945908 0.18378363 0.86897695" fovy="48"/>
+  </worldbody>
+
+  <contact>
+    <exclude body1="left/base_link" body2="table"/>
+  </contact>
+</mujoco>
