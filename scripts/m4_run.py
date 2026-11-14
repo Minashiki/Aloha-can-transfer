@@ -19,14 +19,14 @@ import mujoco
 import numpy as np
 import yaml
 
-from aloha_pp.control.gains import resolve_gains
 from aloha_pp.control.logs import save_run
 from aloha_pp.control.reference import build_speed_family, pick_place_waypoints
-from aloha_pp.control.tracking import TrackingController, velocity_limits
+from aloha_pp.control.tracking import velocity_limits
 from aloha_pp.kin.ik import DlsIk
 from aloha_pp.planning.metrics import classify_episode, signals_from_log
 from aloha_pp.planning.planner import PickPlacePlanner
 from aloha_pp.robot import repo_root, scene_xml
+from aloha_pp.sim.c3 import c3_controller, c3_gains, motor_cfg
 from aloha_pp.sim.env import AlohaCanEnv, load_config
 
 JOINTS = ("waist", "shoulder", "elbow", "forearm_roll", "wrist_angle", "wrist_rotate")
@@ -50,45 +50,15 @@ def _parse_seeds(text: str) -> list[int]:
 
 
 def _gains(m3: dict, m4: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    kp, kd, ki, _omega = resolve_gains(
-        np.asarray(m3["m_diag"], dtype=float),
-        omega=float(m4["omega"]),
-        zeta=float(m4["zeta"]),
-        ki_factor=float(m4["ki_factor"]),
-        omega_joints=m4.get("omega_joints"),
-        reference=m3,
-    )
-    return kp, kd, ki
+    return c3_gains(m3, m4)
 
 
-def _controller(env: AlohaCanEnv, m3: dict, kp, kd, ki) -> TrackingController:
-    return TrackingController(
-        env.model,
-        kind="C3",
-        site_name=env.cfg["tcp_site"],
-        v_max=velocity_limits(env.cfg),
-        control_dt=1.0 / float(env.cfg["control_hz"]),
-        n_substeps=env.n_substeps,
-        gripper_open=float(env.cfg["gripper_open"]),
-        ik_damping=float(m3["ik_damping"]),
-        ik_max_iters=int(m3["ik_max_iters"]),
-        ik_pos_tol=float(m3["ik_pos_tol"]),
-        ik_rot_tol=float(m3["ik_rot_tol"]),
-        ik_rot_weight=float(m3["ik_rot_weight"]),
-        kp=kp,
-        kd=kd,
-        ki=ki,
-        tt=1.0 / float(m3["omega"]),
-        scheme="lookahead",
-        a_max=np.asarray(m3["accel_limit"], dtype=float),
-    )
+def _controller(env: AlohaCanEnv, m3: dict, kp, kd, ki):
+    return c3_controller(env, m3, kp, kd, ki)
 
 
 def _motor_cfg(m1: dict) -> dict:
-    cfg = dict(m1)
-    cfg["actuator"] = "motor"
-    cfg["gravity_compensation"] = False
-    return cfg
+    return motor_cfg(m1)
 
 
 def _empty_rows() -> dict[str, list]:

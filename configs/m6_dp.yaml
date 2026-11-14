@@ -1,0 +1,72 @@
+# M6 image diffusion policy (behavior cloning).
+#
+# Observation: agentview + wrist_cam_left at 96x96, plus tcp_pose (7) and
+# gripper_opening (1). History is n_obs_steps frames. No object pose, no joints.
+# Action: 8-D absolute base-frame TCP (xyz, quaternion wxyz, gripper).
+# The network predicts pred_horizon steps and the runner executes exec_horizon,
+# previewing the next step inside the chunk (step 8 previews step 9).
+# DDIM eta is 0. Initial noise shape is (batch, pred_horizon, action_dim).
+
+seed: 0
+dataset: outputs/m5/dataset/demos.hdf5
+n_train_demos: 30
+subset_seed: 0
+n_obs_steps: 2
+pred_horizon: 16
+exec_horizon: 8
+action_dim: 8
+state_dim: 8
+image_size: 96
+
+# Training diffusion length. Sampling uses ddim_steps (5-10). eta is fixed at 0.
+denoising_steps: 100
+ddim_steps: 8
+denoised_clip: 1.0
+
+# DPPO robomimic Can image pretrain: lr 1e-4, weight decay 1e-6, EMA 0.995,
+# cosine schedule, 2000 epochs, warmup 100. Batch there is 256 with a horizon
+# of 4 and one camera; 64 is the default here because the chunk is 16 and
+# there are two cameras. Measure and raise it if memory allows.
+lr: 1.0e-4
+min_lr: 1.0e-5
+weight_decay: 1.0e-6
+warmup_epochs: 100
+epochs: 2000
+batch_size: 64
+ema_decay: 0.995
+grad_clip: 1.0
+augment: true
+shift_pad: 4
+range_eps: 1.0e-6
+
+vit:
+  depth: 1
+  embed_dim: 128
+  num_heads: 4
+  embed_norm: 0
+
+unet:
+  diffusion_step_embed_dim: 32
+  dim: 40
+  dim_mults: [1, 2]
+  kernel_size: 5
+  n_groups: 8
+  cond_predict_scale: true
+  spatial_emb: 128
+  smaller_encoder: false
+  dropout: 0.0
+
+# 0 means one full pass of the held-out demos (345 batches at batch 64).
+# One full pass measured 3.6 s, about twice a training epoch, so it runs
+# every val_loss_every epochs and again on the last epoch. val_every is the
+# closed-loop episode check and is independent of this.
+val_loss_every: 20
+val_every: 100
+n_val_episodes: 4
+val_batches: 0
+# M5 demonstrations last at most 15.5 s. 25 s leaves room for a slower policy.
+episode_timeout_s: 25.0
+video_fps: 10
+video_max_mb: 2.0
+save_every: 100
+device: cuda

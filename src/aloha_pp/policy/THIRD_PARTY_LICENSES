@@ -1,0 +1,63 @@
+DPPO (vendored excerpts)
+=======================
+
+Repository: https://github.com/irom-princeton/dppo
+Commit: cc7234ad7ff39a8f32de3af903606723a16f0648
+License: MIT
+
+Files copied into this directory, and the paths they came from:
+
+- modules.py
+  model/diffusion/modules.py
+  model/common/modules.py
+- vit.py
+  model/common/vit.py
+- unet1d.py
+  model/diffusion/unet.py
+- diffusion.py
+  model/diffusion/diffusion.py
+  model/diffusion/sampling.py
+
+The ViT encoder is attributed by DPPO to IBRL
+(https://github.com/hengyuan-hu/ibrl). The cosine schedule and the 1D
+residual blocks are attributed by DPPO to Diffuser
+(https://github.com/jannerm/diffuser) and to Diffusion Policy
+(https://github.com/real-stanford/diffusion_policy). Those notes are kept in
+the file headers. The text below is the license of the DPPO revision that
+was copied. The excerpts are not imported from a DPPO install.
+
+What changed relative to that revision:
+
+- einops rearranges are torch reshape / transpose / flatten.
+- hydra instantiation, wandb, and the RL fine-tuning classes are not copied.
+- ResidualMLP / cond_mlp is not copied; the Can image config does not use it.
+- PatchEmbed1 is not copied; the Can image config uses embed2.
+- Random shift runs only in train mode.
+- DDIM eta is fixed at 0. Sampling takes the initial noise as an argument
+  and does not draw a later noise tensor when that coefficient is zero.
+- Attention uses the math SDPA kernel.
+- Image history uses the sliced time length when splitting cameras.
+
+--------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2024 Intelligent Robot Motion Lab
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -116,7 +116,7 @@ class AlohaCanEnv:
         cam = self.cfg["camera"]
         self.image_height = int(cam["height"])
         self.image_width = int(cam["width"])
-        self._renderer: mujoco.Renderer | None = None
+        self._renderers: dict[tuple[int, int], mujoco.Renderer] = {}
         cell = self.cfg["target_cells"]["fixed_1"]
         self.tracker = SuccessTracker(
             center=np.asarray(cell["center"], dtype=float),
@@ -135,9 +135,21 @@ class AlohaCanEnv:
         self.close()
 
     def close(self) -> None:
-        if self._renderer is not None:
-            self._renderer.close()
-            self._renderer = None
+        for renderer in self._renderers.values():
+            renderer.close()
+        self._renderers.clear()
+
+    @property
+    def _renderer(self) -> mujoco.Renderer | None:
+        """Default-resolution renderer, if one has been created.
+
+        Existing checks use this attribute. Extra resolutions live in
+        ``_renderers`` and are released by ``close`` as well.
+        """
+        if not self._renderers:
+            return None
+        key = (int(self.image_height), int(self.image_width))
+        return self._renderers.get(key, next(iter(self._renderers.values())))
 
     def reset(
         self,
@@ -384,16 +396,24 @@ class AlohaCanEnv:
 
     def _ik_info(self) -> dict:
         result = getattr(self.controller, "last_result", None)
-        if result is None:
-            return {"ik_success": True, "ik_pos_err": 0.0, "ik_rot_err": 0.0}
-        ok = bool(result.success)
         preview = getattr(self.controller, "last_next_result", None)
-        if preview is not None:
-            ok = ok and bool(preview.success)
+        if result is None:
+            current = True
+            pos = 0.0
+            rot = 0.0
+        else:
+            current = bool(result.success)
+            pos = float(result.pos_err)
+            rot = float(result.rot_err)
+        preview_present = preview is not None
+        preview_ok = True if preview is None else bool(preview.success)
         return {
-            "ik_success": ok,
-            "ik_pos_err": float(result.pos_err),
-            "ik_rot_err": float(result.rot_err),
+            "ik_success": current and preview_ok,
+            "ik_pos_err": pos,
+            "ik_rot_err": rot,
+            "ik_current_success": current,
+            "ik_preview_success": preview_ok,
+            "ik_preview_present": preview_present,
         }
 
     def _sync_derived(self) -> None:
@@ -439,15 +459,12 @@ class AlohaCanEnv:
         return out
 
     def _get_renderer(self, height: int, width: int) -> mujoco.Renderer:
-        if (
-            self._renderer is None
-            or self._renderer.height != height
-            or self._renderer.width != width
-        ):
-            if self._renderer is not None:
-                self._renderer.close()
-            self._renderer = mujoco.Renderer(self.model, height=height, width=width)
-        return self._renderer
+        key = (int(height), int(width))
+        renderer = self._renderers.get(key)
+        if renderer is None:
+            renderer = mujoco.Renderer(self.model, height=key[0], width=key[1])
+            self._renderers[key] = renderer
+        return renderer
 
 
 def _yaw_quat(yaw: float) -> np.ndarray:
