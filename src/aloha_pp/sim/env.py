@@ -95,15 +95,19 @@ class AlohaCanEnv:
         )
         self.can_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "can")
         self.can_geom = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "can_collision")
-        finger_bodies = {
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left/left_finger_link"),
-            mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left/right_finger_link"),
-        }
-        self.finger_geoms = {
+        left_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left/left_finger_link")
+        right_body = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "left/right_finger_link")
+        self.left_finger_geoms = {
             geom_id
             for geom_id in range(self.model.ngeom)
-            if int(self.model.geom_bodyid[geom_id]) in finger_bodies
+            if int(self.model.geom_bodyid[geom_id]) == left_body
         }
+        self.right_finger_geoms = {
+            geom_id
+            for geom_id in range(self.model.ngeom)
+            if int(self.model.geom_bodyid[geom_id]) == right_body
+        }
+        self.finger_geoms = self.left_finger_geoms | self.right_finger_geoms
         can_joint = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, "can_joint")
         self.can_qpos_adr = int(self.model.jnt_qposadr[can_joint])
         self.can_dof_adr = int(self.model.jnt_dofadr[can_joint])
@@ -183,9 +187,15 @@ class AlohaCanEnv:
         on_substep: Callable[[AlohaCanEnv], None] | None = None,
         *,
         render: bool = True,
+        next_action: np.ndarray | None = None,
     ) -> tuple[dict, bool, dict]:
         if self._uses_substep_controller():
-            self.controller.set_target(self.model, self.data, action)
+            # Keyword is omitted when there is no preview so a controller whose
+            # set_target still takes (model, data, action) keeps that signature.
+            if next_action is None:
+                self.controller.set_target(self.model, self.data, action)
+            else:
+                self.controller.set_target(self.model, self.data, action, next_action)
         else:
             self.controller.apply(self.model, self.data, action)
         info = self._ik_info()
@@ -265,13 +275,27 @@ class AlohaCanEnv:
 
     def fingers_released(self) -> bool:
         """True when no finger geom is in contact with the can collision geom."""
+        return not bool(np.any(self.finger_can_contacts()))
+
+    def finger_can_contacts(self) -> np.ndarray:
+        """``(left, right)`` contact with ``can_collision``. Contacts must be current."""
+        left = False
+        right = False
         can_geom = int(self.can_geom)
         for index in range(self.data.ncon):
             contact = self.data.contact[index]
             pair = {int(contact.geom1), int(contact.geom2)}
-            if can_geom in pair and pair & self.finger_geoms:
-                return False
-        return True
+            if can_geom not in pair:
+                continue
+            other = pair - {can_geom}
+            if not other:
+                continue
+            geom = other.pop()
+            if geom in self.left_finger_geoms:
+                left = True
+            if geom in self.right_finger_geoms:
+                right = True
+        return np.array([left, right], dtype=bool)
 
     def _apply_target_cell(self, mode: str) -> None:
         cell = self.cfg["target_cells"][mode]
@@ -282,8 +306,12 @@ class AlohaCanEnv:
         result = getattr(self.controller, "last_result", None)
         if result is None:
             return {"ik_success": True, "ik_pos_err": 0.0, "ik_rot_err": 0.0}
+        ok = bool(result.success)
+        preview = getattr(self.controller, "last_next_result", None)
+        if preview is not None:
+            ok = ok and bool(preview.success)
         return {
-            "ik_success": bool(result.success),
+            "ik_success": ok,
             "ik_pos_err": float(result.pos_err),
             "ik_rot_err": float(result.rot_err),
         }

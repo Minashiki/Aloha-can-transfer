@@ -1,0 +1,42 @@
+# M4 task experiment. Scene, gripper openings, velocity limits, and the success
+# test stay in configs/m1_pick_place.yaml. C3 gains stay in configs/m3_track.yaml.
+# Nothing here changes kp, kd, ki, torque limits, velocity limits, or the
+# success thresholds.
+
+# Scalar frequency. omega_joints, when set to six numbers, replaces it per
+# joint. null keeps every joint at `omega`, and the generated gains are the
+# m3_track.yaml arrays. M4 runs leave this null.
+omega: 20.0
+omega_joints: null
+zeta: 1.0
+ki_factor: 0.1
+
+# Wait at the grasp and place waypoints before the gripper moves:
+# reference lag (one 50 ms tick in preview mode) plus settle_s.
+# settle_s is 5 / omega, about five closed-loop time constants after the
+# reference has arrived. The ramp length is the M1 smoke test's 12 ticks.
+# post_close_dwell_s is that smoke test's 8-tick pause before the lift.
+settle_s: 0.25
+pregrasp_hold_s: 0.10
+grip_ramp_ticks: 12
+post_close_dwell_s: 0.40
+post_open_dwell_s: 0.20
+success_wait_s: 2.0
+
+pregrasp_clearance: 0.08
+lift_height: 0.10
+# TCP is placed so the measured can center sits this far above the cell center.
+# place_min_above refuses a command that would push the can center lower.
+place_gap: 0.006
+place_min_above: 0.003
+
+# A carry counts as a drop when the can falls this far below the grasp height,
+# or neither finger is touching the can for 10 physics steps (20 ms) while the
+# can is still more than 2 cm above the cell center. One finger losing contact
+# does not count.
+drop_z: 0.03
+
+video_max_mb: 2.0
+video_height: 360
+video_width: 480
+video_fps: 10

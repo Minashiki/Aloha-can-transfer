@@ -5,6 +5,7 @@ Run: conda run -n AIControl python scripts/m3_run.py
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -297,9 +298,14 @@ def _both_torques(motor, position, log, step: int, kp, kv, grip: float):
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", default=None, help="output directory; default outputs/m3")
+    args = parser.parse_args()
     started = time.perf_counter()
     root = repo_root()
-    out = root / "outputs" / "m3"
+    out = Path(args.out) if args.out else root / "outputs" / "m3"
+    if not out.is_absolute():
+        out = root / out
     run_dir = out / "runs"
     run_dir.mkdir(parents=True, exist_ok=True)
     m1 = load_config()

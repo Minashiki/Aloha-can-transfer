@@ -6,6 +6,9 @@ acceleration is a boundary condition, not forced to zero. Two online schemes:
 * ``lookahead`` caches one future knot and uses central velocity and central
   acceleration. The knot commanded at time ``k T`` is reached at ``(k+2) T``.
   Total lag is 100 ms: the original 50 ms pipeline plus one 50 ms buffer.
+  Passing ``q_future`` to :meth:`JointStream.push` plays the current knot on
+  this tick instead, so it arrives at ``(k+1) T`` (50 ms). Omit ``q_future``
+  and the wait-mode path below is unchanged.
 * ``causal`` uses only the current state and the knot that just arrived.
   Endpoint acceleration is the change in secant velocity, clipped to
   ``a_max``; it is not forced to zero. The knot is the end of the segment
@@ -26,7 +29,7 @@ SCHEMES = ("lookahead", "causal")
 _PEAK_SAMPLES = 401
 
 # Ticks of delay from the 20 Hz command to the joint reference arriving on it.
-SCHEME_LAG_TICKS = {"lookahead": 2, "causal": 1}
+SCHEME_LAG_TICKS = {"lookahead": 2, "causal": 1, "preview": 1}
 
 
 def scheme_lag_s(scheme: str, control_dt: float) -> float:
@@ -296,6 +299,13 @@ class JointStream:
         self._v1 = self.v.copy()
         self._a1 = self.a.copy()
         self._limited = np.zeros(self.q.shape[0], dtype=bool)
+        self.held_segment = False
+        self._seen_preview = False
+        self.dropped_knot = False
+
+    @property
+    def seen_preview(self) -> bool:
+        return self._seen_preview
 
     def reset(self, q0: np.ndarray) -> None:
         self.q = np.asarray(q0, dtype=float).copy()
@@ -306,10 +316,26 @@ class JointStream:
         self._active = False
         self._k = 0
         self._limited = np.zeros(self.q.shape[0], dtype=bool)
+        self.held_segment = False
+        self._seen_preview = False
+        self.dropped_knot = False
 
-    def push(self, q_target: np.ndarray) -> np.ndarray:
-        """Open the segment played by the next ``n_substeps`` samples."""
+    def push(self, q_target: np.ndarray, q_future: np.ndarray | None = None) -> np.ndarray:
+        """Open the segment played by the next ``n_substeps`` samples.
+
+        ``q_future is None`` on a stream that has never been given a future
+        knot is the M3 lookahead cache (100 ms) or the causal scheme. After
+        any call with ``q_future``, a later call that omits it is treated as
+        ``q_future = q_target`` and still uses the central difference.
+        """
         q_target = np.asarray(q_target, dtype=float).reshape(-1)
+        self.dropped_knot = False
+        if q_future is None and self._seen_preview and self.scheme == "lookahead":
+            q_future = q_target.copy()
+        if q_future is not None:
+            if self.scheme != "lookahead":
+                raise ValueError("q_future is only valid for the lookahead scheme")
+            return self._push_preview(q_target, np.asarray(q_future, dtype=float).reshape(-1))
         if self.scheme == "causal":
             q1, v1, a1, a0_used, limited = plan_segment(
                 self.q,
@@ -320,6 +346,7 @@ class JointStream:
                 a0=self.a,
                 a_max=self.a_max,
             )
+            self.held_segment = False
             self._load(q1, v1, a1, a0_used, limited)
             return limited.copy()
         return self._push_lookahead(q_target)
@@ -328,13 +355,43 @@ class JointStream:
         if self._pending is None:
             # One-tick cache. This period holds the current reference.
             self._pending = q_target.copy()
+            self.held_segment = True
             self._load(self.q, self.v, self.a, self.a, np.zeros(self.q.shape[0], dtype=bool))
             return self._limited.copy()
         q_prev = self._prev_knot
-        q_mid = self._pending
+        q_mid = self._pending.copy()
+        limited = self._open_central(q_prev, q_mid, q_target)
+        self._prev_knot = q_mid
+        self._pending = q_target.copy()
+        self.held_segment = False
+        return limited
+
+    def _push_preview(self, q_target: np.ndarray, q_future: np.ndarray) -> np.ndarray:
+        """Play ``q_target`` on this tick. ``q_future`` is only a derivative sample.
+
+        A knot left in the wait-mode cache is discarded. It is not played and
+        it is not used as a sample in this difference or any later one.
+        ``dropped_knot`` records that discard. A segment that hits the speed
+        limit is braked like M3 and flagged; its endpoint is then the braked
+        one, so a limited segment is not promised to land on ``q_target``.
+        """
+        self._seen_preview = True
+        self.held_segment = False
+        if self._pending is not None:
+            self._pending = None
+            self.dropped_knot = True
+        limited = self._open_central(self._prev_knot, q_target, q_future)
+        self._prev_knot = np.asarray(q_target, dtype=float).copy()
+        return limited
+
+    def _open_central(self, q_prev: np.ndarray, q_mid: np.ndarray, q_after: np.ndarray) -> np.ndarray:
+        """Quintic ending at ``q_mid`` with the lookahead central difference."""
         duration = self.control_dt
-        v1 = (q_target - q_prev) / (2.0 * duration)
-        a1 = (q_target - 2.0 * q_mid + q_prev) / (duration * duration)
+        q_prev = np.asarray(q_prev, dtype=float)
+        q_mid = np.asarray(q_mid, dtype=float)
+        q_after = np.asarray(q_after, dtype=float)
+        v1 = (q_after - q_prev) / (2.0 * duration)
+        a1 = (q_after - 2.0 * q_mid + q_prev) / (duration * duration)
         q1 = q_mid.copy()
         a0 = self.a.copy()
         limited = np.zeros(self.q.shape[0], dtype=bool)
@@ -366,8 +423,6 @@ class JointStream:
             v1[i] = vv[0]
             a1[i] = aa[0]
             a0[i] = a0_used[0]
-        self._prev_knot = q_mid.copy()
-        self._pending = q_target.copy()
         self._load(q1, v1, a1, a0, limited)
         return limited.copy()
 
@@ -425,7 +480,21 @@ def simulate_stream(
     scheme: str = "lookahead",
     a_max: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Replay targets. Returns qd, qdd, and the overspeed flag, each ``(N, dof)``."""
+    """Replay targets. Returns qd, qdd, and the overspeed flag, each ``(N, dof)``.
+
+    ``scheme="preview"`` feeds each knot its successor (the last knot repeats
+    itself) through :meth:`JointStream.push`. The underlying stream is still
+    lookahead. ``scheme="lookahead"`` is the M3 wait mode.
+    """
+    if scheme == "preview":
+        return _simulate_preview(
+            q_targets,
+            q0,
+            control_dt=control_dt,
+            n_substeps=n_substeps,
+            v_max=v_max,
+            a_max=a_max,
+        )
     stream = JointStream(
         q0,
         control_dt=control_dt,
@@ -439,6 +508,38 @@ def simulate_stream(
     flags = []
     for target in np.asarray(q_targets, dtype=float):
         stream.push(target)
+        for _ in range(n_substeps):
+            _q, qd, qdd, flag = stream.advance()
+            speeds.append(qd)
+            accels.append(qdd)
+            flags.append(flag)
+    return np.stack(speeds), np.stack(accels), np.stack(flags)
+
+
+def _simulate_preview(
+    q_targets: np.ndarray,
+    q0: np.ndarray,
+    *,
+    control_dt: float,
+    n_substeps: int,
+    v_max: np.ndarray,
+    a_max: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    stream = JointStream(
+        q0,
+        control_dt=control_dt,
+        n_substeps=n_substeps,
+        v_max=v_max,
+        scheme="lookahead",
+        a_max=a_max,
+    )
+    targets = np.asarray(q_targets, dtype=float)
+    speeds = []
+    accels = []
+    flags = []
+    for index, target in enumerate(targets):
+        future = targets[index + 1] if index + 1 < targets.shape[0] else target
+        stream.push(target, q_future=future)
         for _ in range(n_substeps):
             _q, qd, qdd, flag = stream.advance()
             speeds.append(qd)

@@ -1,10 +1,16 @@
 """Per-physics-step tracking controller shared by B0, B1, and C1–C4.
 
 ``set_target`` runs one DLS solve per 20 Hz Cartesian command and opens a
-quintic segment. ``compute`` runs once per physics step: it refreshes MuJoCo
-so ``qfrc_bias`` and ``M`` match the current ``qpos`` / ``qvel``, samples the
-segment, and writes either a position setpoint (B0, B1) or a clipped torque
-(C1–C4). The gripper stays on its position actuator.
+quintic segment. Pass ``next_action`` to solve a second IK and play the
+current knot on this tick (50 ms lag). Omit it on a controller that has never
+received a next action and the M3 one-knot cache is unchanged (100 ms). After
+a next action has been used, a later call that omits it repeats the current
+target as its own next sample and still uses the central difference.
+``compute`` runs once per physics step: it refreshes
+MuJoCo so ``qfrc_bias`` and ``M`` match the current ``qpos`` / ``qvel``,
+samples the segment, and writes either a position setpoint (B0, B1) or a
+clipped torque (C1–C4). The gripper stays on its position actuator and
+follows ``action[7]``, clipped to that actuator's ``ctrlrange``.
 
 ``read_applied`` must run after ``mj_step`` and before the next ``mj_forward``.
 ``mj_step`` leaves ``qfrc_actuator`` equal to the force it just applied;
@@ -13,6 +19,7 @@ segment, and writes either a position setpoint (B0, B1) or a clipped torque
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import mujoco
@@ -47,6 +54,7 @@ class StepSample:
     used_q: np.ndarray
     used_qd: np.ndarray
     used_bias: np.ndarray
+    dropped_knot: bool = False
 
 
 class TrackingController:
@@ -84,6 +92,12 @@ class TrackingController:
         self.arm = arm_index(model)
         self.position_mode = kind in POSITION_KINDS
         self.gripper_open = float(gripper_open)
+        self.grip_range = model.actuator_ctrlrange[self.arm.grip_act].copy()
+        self._grip_cmd = float(gripper_open)
+        self.reference_mode = "wait"
+        self.ik_solve_s = 0.0
+        self.ik_next_solve_s = 0.0
+        self.last_next_result: IkResult | None = None
         self.dt = float(control_dt) / int(n_substeps)
         self.ik = DlsIk(
             model,
@@ -152,26 +166,46 @@ class TrackingController:
         self._ik_pos = 0.0
         self._ik_rot = 0.0
         self._ik_ok = True
+        self._grip_cmd = self.gripper_open
+        self.reference_mode = "wait"
+        self.ik_solve_s = 0.0
+        self.ik_next_solve_s = 0.0
+        self.last_next_result = None
         if self.law is not None:
             self.law.reset()
 
-    def set_target(self, model: mujoco.MjModel, data: mujoco.MjData, action: np.ndarray) -> None:
+    def set_target(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        action: np.ndarray,
+        next_action: np.ndarray | None = None,
+    ) -> None:
         del model, data
-        action = np.asarray(action, dtype=float).reshape(8)
-        quat = action[3:7]
-        norm = float(np.linalg.norm(quat))
-        if norm < 1e-8:
-            raise ValueError("action quaternion has zero length")
-        quat = quat / norm
-        pos = action[:3]
-        result = self._solve(pos, quat)
-        q_cmd = result.q if result.success else self._seed
-        self._seed = np.asarray(q_cmd, dtype=float).copy()
-        self.stream.push(self._seed)
+        q_cmd, result, elapsed = self._ik_action(action)
+        self._seed = q_cmd.copy()
         self.last_result = result
+        self.last_next_result = None
         self._ik_pos = float(result.pos_err)
         self._ik_rot = float(result.rot_err)
         self._ik_ok = bool(result.success)
+        self.ik_solve_s = elapsed
+        self.ik_next_solve_s = 0.0
+        self._grip_cmd = float(np.clip(np.asarray(action, dtype=float).reshape(8)[7], self.grip_range[0], self.grip_range[1]))
+        if next_action is None:
+            self.stream.push(q_cmd)
+            self.reference_mode = "preview" if self.stream.seen_preview else "wait"
+            return
+        # The preview IK starts from the current solution. The seed is put
+        # back afterwards so the next tick still starts from this knot.
+        q_next, next_result, elapsed_next = self._ik_action(next_action)
+        self._seed = q_cmd.copy()
+        self.last_next_result = next_result
+        self.ik_next_solve_s = elapsed_next
+        self._ik_ok = bool(result.success) and bool(next_result.success)
+        self.reference_mode = "preview"
+        future = q_next if next_result.success else q_cmd
+        self.stream.push(q_cmd, q_future=future)
 
     def compute(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
         """Torque or position command from the current, refreshed state."""
@@ -188,7 +222,7 @@ class TrackingController:
             tau_cmd = self.law(data, q, qd, q_d, qd_d, qdd_d)
             data.ctrl[self.arm.act_ids] = np.clip(tau_cmd, self.arm.force_lo, self.arm.force_hi)
             integral = self.law.integral.copy()
-        data.ctrl[self.arm.grip_act] = self.gripper_open
+        data.ctrl[self.arm.grip_act] = self._grip_cmd
         saturated = (tau_cmd < self.arm.force_lo - 1e-8) | (tau_cmd > self.arm.force_hi + 1e-8)
         tcp_pos, tcp_quat = self._tcp_of(q_d)
         bias = data.qfrc_bias[self.arm.dof_adr].copy()
@@ -211,6 +245,7 @@ class TrackingController:
             used_q=q,
             used_qd=qd,
             used_bias=bias,
+            dropped_knot=bool(self.stream.dropped_knot),
         )
 
     def read_applied(self, model: mujoco.MjModel, data: mujoco.MjData) -> None:
@@ -219,6 +254,19 @@ class TrackingController:
         if self.sample is None:
             raise RuntimeError("read_applied called before compute")
         self.sample.tau_applied = data.qfrc_actuator[self.arm.dof_adr].copy()
+
+    def _ik_action(self, action: np.ndarray) -> tuple[np.ndarray, IkResult, float]:
+        action = np.asarray(action, dtype=float).reshape(8)
+        quat = action[3:7]
+        norm = float(np.linalg.norm(quat))
+        if norm < 1e-8:
+            raise ValueError("action quaternion has zero length")
+        quat = quat / norm
+        started = time.perf_counter()
+        result = self._solve(action[:3], quat)
+        elapsed = time.perf_counter() - started
+        q_cmd = result.q if result.success else self._seed.copy()
+        return np.asarray(q_cmd, dtype=float).copy(), result, elapsed
 
     def _solve(self, pos: np.ndarray, quat: np.ndarray) -> IkResult:
         if _same_home(pos, quat, self.home_pos, self.home_quat):

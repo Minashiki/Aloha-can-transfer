@@ -5,7 +5,9 @@ Run: conda run -n AIControl python scripts/m3_analyze.py
 
 from __future__ import annotations
 
+import argparse
 import os
+from pathlib import Path
 
 os.environ.setdefault("MUJOCO_GL", "egl")
 
@@ -16,8 +18,13 @@ from aloha_pp.robot import repo_root
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", default=None, help="directory that contains runs/; default outputs/m3")
+    args = parser.parse_args()
     root = repo_root()
-    out = root / "outputs" / "m3"
+    out = Path(args.out) if args.out else root / "outputs" / "m3"
+    if not out.is_absolute():
+        out = root / out
     loaded = load_directory(out / "runs")
     rows = [row for _arrays, _meta, row in loaded]
     csv_path, md_path = write_tables(rows, out)
