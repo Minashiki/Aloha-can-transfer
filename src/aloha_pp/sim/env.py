@@ -139,11 +139,21 @@ class AlohaCanEnv:
             self._renderer.close()
             self._renderer = None
 
-    def reset(self, seed: int | None = None, mode: str = "fixed_1", *, render: bool = True) -> dict:
+    def reset(
+        self,
+        seed: int | None = None,
+        mode: str = "fixed_1",
+        *,
+        render: bool = True,
+        can_pose: np.ndarray | None = None,
+        state: dict | None = None,
+    ) -> dict:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
         if seed is not None:
             self._rng = np.random.default_rng(seed)
+        if state is not None:
+            return self._reset_from_state(state, mode, render=render)
         mujoco.mj_resetData(self.model, self.data)
         self.data.qpos[self.arm_qpos_adr] = self.home_q
         self.data.qvel[:] = 0.0
@@ -155,7 +165,13 @@ class AlohaCanEnv:
             self.data.ctrl[self.controller.grip_act] = opening
         # Base pose does not depend on q, but reset leaves xpos stale.
         mujoco.mj_kinematics(self.model, self.data)
-        pos, quat = self._sample_can(mode)
+        if can_pose is None:
+            pos, quat = self._sample_can(mode)
+        else:
+            pose = np.asarray(can_pose, dtype=float).reshape(7)
+            pos = pose[:3].copy()
+            quat = pose[3:].copy()
+            quat = quat / np.linalg.norm(quat)
         self.data.qpos[self.can_qpos_adr : self.can_qpos_adr + 3] = self._base_to_world(pos)
         self.data.qpos[self.can_qpos_adr + 3 : self.can_qpos_adr + 7] = _base_quat_to_world(
             self.data, self.base_id, quat
@@ -179,6 +195,70 @@ class AlohaCanEnv:
         self._sync_derived()
         self.success = False
         self.tracker.reset()
+        return self.get_obs(render=render)
+
+    def capture_state(self) -> dict:
+        """Simulator state after ``reset``, for a bit-exact replay.
+
+        ``qacc_warmstart`` is the constraint solver's warm start. Dropping it
+        makes a later ``reset(state=...)`` integrate a different first step
+        even when ``qpos``, ``qvel``, and ``ctrl`` match. ``time`` is the
+        settled clock (the 50-step settle leaves it at ``50 * timestep``).
+        """
+        state = {
+            "qpos": self.data.qpos.copy(),
+            "qvel": self.data.qvel.copy(),
+            "ctrl": self.data.ctrl.copy(),
+            "time": float(self.data.time),
+            "qacc_warmstart": self.data.qacc_warmstart.copy(),
+            "qacc": self.data.qacc.copy(),
+        }
+        if int(self.model.na) > 0:
+            state["act"] = self.data.act.copy()
+        return state
+
+    def _reset_from_state(self, state: dict, mode: str, *, render: bool) -> dict:
+        """Restore a captured state and skip the settle loop.
+
+        The default ``reset`` path never calls this. Settle is skipped because
+        those 50 steps would leave the saved state.
+        """
+        qpos = np.asarray(state["qpos"], dtype=float).reshape(-1)
+        qvel = np.asarray(state["qvel"], dtype=float).reshape(-1)
+        if qpos.shape != self.data.qpos.shape or qvel.shape != self.data.qvel.shape:
+            raise ValueError("state qpos/qvel shape does not match the model")
+        mujoco.mj_resetData(self.model, self.data)
+        self.data.qpos[:] = qpos
+        self.data.qvel[:] = qvel
+        self._apply_target_cell(mode)
+        mujoco.mj_forward(self.model, self.data)
+        self.controller.reset(self.model, self.data)
+        if "ctrl" in state:
+            ctrl = np.asarray(state["ctrl"], dtype=float).reshape(-1)
+            if ctrl.shape != self.data.ctrl.shape:
+                raise ValueError("state ctrl shape does not match the model")
+            self.data.ctrl[:] = ctrl
+        # After forward / controller.reset, so the first mj_step sees the
+        # captured solver state rather than the zeros from mj_resetData.
+        if "time" in state:
+            self.data.time = float(state["time"])
+        if "qacc_warmstart" in state:
+            warm = np.asarray(state["qacc_warmstart"], dtype=float).reshape(-1)
+            if warm.shape != self.data.qacc_warmstart.shape:
+                raise ValueError("state qacc_warmstart shape does not match the model")
+            self.data.qacc_warmstart[:] = warm
+        if "qacc" in state:
+            qacc = np.asarray(state["qacc"], dtype=float).reshape(-1)
+            if qacc.shape != self.data.qacc.shape:
+                raise ValueError("state qacc shape does not match the model")
+            self.data.qacc[:] = qacc
+        if "act" in state and int(self.model.na) > 0:
+            act = np.asarray(state["act"], dtype=float).reshape(-1)
+            if act.shape != self.data.act.shape:
+                raise ValueError("state act shape does not match the model")
+            self.data.act[:] = act
+        self.tracker.reset()
+        self.success = False
         return self.get_obs(render=render)
 
     def step(

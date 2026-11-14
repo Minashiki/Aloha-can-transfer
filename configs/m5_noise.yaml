@@ -1,0 +1,32 @@
+# Waypoint / timing noise for the backup planner demonstrations.
+# Every value is an amplitude. All zeros reproduce the M4 medium planner
+# tick for tick (see NoisyPickPlacePlanner).
+
+# Grasp and place xy, metres. 4 mm is inside the can radius (0.0225 m) and
+# inside the target cell (half-extents 0.0324 x 0.0414), so the can still
+# meets the fingers and still lands in the cell.
+grasp_xy: 0.004
+place_xy: 0.004
+
+# Extra metres on the lift and the pre-place hover. The nominal lift is
+# 0.10 m; 5 mm does not change clearance.
+lift_z: 0.005
+
+# Radians added to choose_yaw. 0.10 rad is about 6 degrees, small enough
+# that the fingers still point along the axis M4 picked.
+yaw: 0.10
+
+# Each of the seven motion segments is multiplied by Uniform(1-s, 1+s).
+# Medium peaks near 0.5 of the velocity limit, so a 15% speed-up stays
+# under the limit.
+time_scale: 0.15
+
+# Metres. Lateral shift of the carry, perpendicular to the carry direction
+# (full shift on the lift point, half on the hover). This is the via point.
+via_xy: 0.008
+
+# Backup file size when retargeting already produced enough successes.
+backup_episodes: 8
+# Seeds used when the backup has to fill the dataset up to min_success.
+seed_start: 1000
+max_attempts: 80

@@ -1,0 +1,74 @@
+# M5 retargeting. Gripper openings, velocity limits, the success test, and
+# random_can stay in configs/m1_pick_place.yaml. This file only adds the
+# choices M5 is allowed to make.
+
+# Sum of absolute Panda finger positions. Open is about 0.08 (two fingers at
+# 0.04). On low_dim_v141 every demo's minimum is 0.0417, but the first three
+# frames are the reset pose at that same width, and six demos only hold the
+# real grasp between 0.05 and 0.055. 0.055 plus a minimum duration separates
+# the reset blip from the grasp (shortest real close is 10 frames).
+gripper_close_width: 0.055
+min_close_frames: 8
+
+# The source gripper opens while the can is still ~0.24 m above the cell, and
+# the can's final xy is a median 4.6 cm from that cell center. This project's
+# cell half-extents are 3.2 cm / 4.1 cm, so the fall misses. Descend to the
+# cell center plus the grasp offset, with the same 6 mm gap M4 uses, then
+# retreat. place_gap is copied from configs/m4_task.yaml.
+place_gap: 0.006
+retreat_z: 0.08
+place_step: 0.01
+
+# Mid-carry TCP height. The right-bin wall top is about 0.029 m in the base
+# frame (bin body z=-0.0072, wall center 0.018, half-height 0.018). 0.10 m
+# clears the wall and the can. The lift is applied with a sine envelope so
+# the grasp and release samples stay on the object.
+carry_clearance_z: 0.10
+
+# Same wait the M4 planner inserts before the gripper moves: one preview tick
+# plus settle_s. Ramp and dwell match configs/m4_task.yaml. Copied here so M5
+# does not edit that file. These blocks are inserted after the per-segment
+# time scale, so the durations stay fixed; they are not multiplied by it.
+preview_lag_ticks: 1
+settle_s: 0.25
+grip_ramp_ticks: 12
+post_close_dwell_s: 0.40
+post_open_dwell_s: 0.20
+success_wait_s: 2.0
+
+# Quintic from the home TCP. The first sample is home (u = 0); the previous
+# retargeted sample is the arrival (u = 1). Position and orientation both
+# follow the quintic blend. This duration is before time scaling.
+home_approach_s: 0.5
+
+# Preview-stream joint speed (simulate_stream scheme=preview, from the home
+# joint angles, on the float32 actions) must stay at or under this fraction
+# of v_max, and the overspeed flags must all be clear. 0.5 is the medium
+# tier's peak fraction from M4. Knot-to-knot differences are not the check.
+speed_ratio: 0.5
+
+# Source samples, on each side of a motion-segment boundary, over which the
+# two segment slowdowns blend with a quintic. The interior of a long segment
+# keeps its own coefficient. Short segments give the blend less room.
+scale_blend_ticks: 5
+
+# not_lifted: after the gripper command first reaches gripper_close, the
+# can's rise above its height at that physics step stays below this, until
+# the command leaves the close band. dropped_after_lift is a rise of at
+# least this much followed by a loss of both finger contacts or a fall.
+# lost_physics_steps is 20 ms at 500 Hz, the same run length M4 uses.
+# The fall distance is m4_task.yaml drop_z (read, not copied).
+lift_thresh_m: 0.02
+grip_closed_tol: 1.0e-4
+lost_physics_steps: 10
+
+# Offline IK position error above this (metres) is ik_unreachable, and the
+# episode is not executed.
+ik_skip_pos_err: 0.002
+
+# Closed-loop cap, in addition to the retargeted length. success_wait_s of
+# the final pose is already inside the trajectory; this is a backstop.
+max_extra_s: 0.5
+
+# How many retarget successes are enough to skip filling with planner noise.
+min_success: 50
