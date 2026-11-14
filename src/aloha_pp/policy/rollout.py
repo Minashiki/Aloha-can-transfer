@@ -135,8 +135,14 @@ def rollout_episode(
     m1: dict,
     m4: dict,
     m5: dict,
+    chunk_noise=None,
 ) -> dict:
-    """One episode. A new chunk is sampled every ``exec_horizon`` control steps."""
+    """One episode. A new chunk is sampled every ``exec_horizon`` control steps.
+
+    ``chunk_noise``, when given, is called as ``chunk_noise(stacked_obs)`` and
+    its return value is the initial noise for that chunk. ``None`` keeps the
+    existing ``sample(obs)`` call, which draws noise inside the policy.
+    """
     device = policy.action_lo.device
     n_obs = int(policy.n_obs_steps)
     hz = float(env.cfg["control_hz"])
@@ -177,7 +183,9 @@ def rollout_episode(
             if player.needs_chunk():
                 _sync(device)
                 started = time.perf_counter()
-                chunk = policy.sample(_stack_hist(hist))
+                stacked = _stack_hist(hist)
+                noise = None if chunk_noise is None else chunk_noise(stacked)
+                chunk = policy.sample(stacked, noise=noise)
                 _sync(device)
                 infer.append(time.perf_counter() - started)
                 player.push(chunk[0].detach().cpu().numpy())

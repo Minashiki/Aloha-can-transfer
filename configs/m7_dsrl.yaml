@@ -1,0 +1,114 @@
+# M7 DSRL-SAC. The diffusion policy stays frozen. SAC acts in its initial-noise
+# space. One RL step is one chunk: 16 predicted steps, 8 executed, and the 8th
+# executed step previews the 9th.
+#
+# Hyperparameters below are the robomimic-can DSRL config unless the comment
+# says this repo changed them.
+# Source: https://github.com/ajwagen/dsrl
+# Commit: 8d21b9cf55459f022c0e769bca1343edd9d30e5a
+# Files: cfg/robomimic/dsrl_can.yaml, train_dsrl.py
+# That yaml's algorithm field is dsrl_na. This run is the dsrl_sac branch,
+# which reads the same train: block (learning rate, UTD, width, magnitude,
+# target entropy). DSRL-NA is not implemented.
+#
+# Official model.learn(total_timesteps=20000000) and buffer_size=20000000 do
+# not fit a 24 h image-training budget or this machine's memory. The numbers
+# below are the measured reduction (see tasks/M7_delivery_r2.md).
+# r1 timed only sample + vec.step and estimated about 17 h. That left out
+# feature encoding, replay writes, the validation video, and checkpoints.
+# r2 timed the real loop (outputs/m7/benchmark_real): 8 envs, width 2048,
+# UTD 20, 402 vec steps, one 16-episode validation plus one video, and two
+# checkpoints. Extrapolating that measurement, 2e6 transitions is about 18.5 h.
+# That is inside 24 h, so total_env_steps stays 2_000_000. UTD and the network
+# width are unchanged.
+
+bc_checkpoint: outputs/m6/train/ckpt_last.pt
+
+# Network init and the N(0, I) warmup generator. Episode seeds are separate.
+seed: 0
+device: cuda
+
+# Must match the loaded M6 policy. The script overwrites these from the checkpoint.
+n_obs_steps: 2
+pred_horizon: 16
+exec_horizon: 8
+action_dim: 8
+
+# w = tanh(u) * noise_scale, shape (16, 8). Official action_magnitude.
+noise_scale: 1.5
+
+# Vec steps of clipped N(0, I) before SAC updates. Official init_rollout_steps.
+# 0 disables the warmup. Total warmup transitions = init_rollout_steps * n_envs.
+init_rollout_steps: 1501
+
+# Official n_envs is 4. n=8 had the highest measured transitions/s (105 vs 66).
+n_envs: 8
+
+# Transitions summed across environments, the same unit as SB3 total_timesteps.
+# 2_000_000 is 10x below the official 20_000_000. The r2 real-loop estimate is
+# about 18.5 h, inside 24 h. UTD and width were not reduced.
+total_env_steps: 2000000
+
+# Official buffer is 20_000_000. Actor features are stored twice (current and
+# next), about 3 KB per transition, so 20e6 is ~60 GB. 2_000_000 matches the
+# step budget (~6 GB) and does not drop early transitions.
+replay_capacity: 2000000
+# Official save_replay_buffer: False. Resume then keeps the weights and starts
+# an empty replay. Set true to write replay.pt beside the checkpoint.
+save_replay: false
+
+# Train episodes count up from here and skip the val and eval sets.
+train_seed_start: 10000
+val_seed_start: 20000
+n_val_episodes: 16
+# Validate every this many transitions. 16 episodes, not 4: M6's 4-episode
+# checks sat at 3/4-4/4 while the 50-seed rate was 0.62.
+val_every: 4000
+val_at_end: true
+# Final comparison seeds. Never used to pick a checkpoint.
+eval_seed_start: 0
+eval_seed_count: 50
+
+# best_val keeps the highest validation success (ties keep the earlier file).
+# last keeps the final weights. Eval seeds 0-49 are not an input to this choice.
+checkpoint_select: best_val
+save_every: 4000
+log_every: 200
+
+timeout_s: 25.0
+video_fps: 10
+video_max_mb: 2.0
+
+# Off by default. Each stage pays at most once per episode.
+# both_contact: both fingers on the can while the gripper command is closed.
+# lifted: can z rises by lift_thresh above the contact height.
+# above_cell: after a lift, the chunk ends above the target cell.
+# released_in_cell: after a lift, the chunk ends inside the cell with no finger contact.
+# Success still pays 1 and terminates. These four numbers are not from DSRL.
+staged_reward:
+  enabled: false
+  both_contact: 0.1
+  lifted: 0.2
+  above_cell: 0.3
+  released_in_cell: 0.4
+
+sac:
+  # One learning rate for actor, critic, and temperature, as in SB3 SAC.
+  actor_lr: 3.0e-4
+  batch_size: 256
+  tau: 0.005
+  discount: 0.99
+  # gradient_steps per vec step. Updates per transition are utd / n_envs.
+  utd: 20
+  layer_size: 2048
+  num_layers: 3
+  use_layer_norm: true
+  n_critics: 2
+  # Official target_ent: 0.0. SB3's "auto" would be -action_dim instead.
+  target_entropy: 0.0
+  log_std_init: 0.0
+  log_std_min: -20.0
+  log_std_max: 2.0
+  # Critic input is privileged state, the actor feature, and w.
+  # The actor does not receive the privileged state.
+  critic_include_actor_feature: true

@@ -127,6 +127,47 @@ class DiffusionPolicy(nn.Module):
         """Initial noise for one sample, without the batch axis."""
         return (self.pred_horizon, self.action_dim)
 
+    def actor_feature_dim(self) -> int:
+        """Width of ``encode_actor_obs``: both cameras' spatial embeddings plus proprio."""
+        net = self.ema.network
+        if not hasattr(net, "compress"):
+            raise TypeError("actor features require the vision UNet")
+        proj = int(net.compress[0].input_proj[0].out_features)
+        return proj * len(net.compress) + self.state_dim * self.n_obs_steps
+
+    @torch.no_grad()
+    def encode_actor_obs(self, obs: dict) -> torch.Tensor:
+        """Frozen features for a DSRL actor. Does not draw noise or change ``sample``.
+
+        The vector is the EMA ViT + SpatialEmb output of both cameras, with
+        augmentation off, concatenated with the normalized proprio state.
+        Proprio is ``pose_state(tcp_pose, gripper_opening)`` over
+        ``n_obs_steps`` frames, the same tensor ``sample`` conditions on.
+        Required keys are the two images, ``tcp_pose``, and ``gripper_opening``.
+        A ``state`` key is an error. Other keys are ignored, so a privileged
+        field cannot change this vector. ``_cond`` is unchanged and still
+        accepts ``state`` for the M6 training path.
+        """
+        if "state" in obs:
+            raise ValueError("encode_actor_obs does not accept a state key; pass tcp_pose and gripper_opening")
+        missing = [key for key in ("agentview", "wrist_cam_left", "tcp_pose", "gripper_opening") if key not in obs]
+        if missing:
+            raise ValueError("encode_actor_obs requires " + ", ".join(missing))
+        was = self.training
+        self.eval()
+        try:
+            cond = self._cond(obs, state_is_normalized=False)
+            net = self.ema.network
+            net.eval()
+            flat = cond["state"].reshape(cond["state"].shape[0], -1)
+            feats = []
+            for view, compress in zip(net._images(cond["rgb"]), net.compress):
+                feats.append(compress(net.backbone(view), flat))
+            visual = torch.cat(feats, dim=-1)
+            return torch.cat([visual, flat], dim=-1)
+        finally:
+            self.train(was)
+
     def n_parameters(self) -> int:
         return sum(p.numel() for p in self.diffusion.parameters())
 
