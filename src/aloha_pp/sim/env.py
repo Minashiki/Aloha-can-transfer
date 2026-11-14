@@ -135,7 +135,7 @@ class AlohaCanEnv:
             self._renderer.close()
             self._renderer = None
 
-    def reset(self, seed: int | None = None, mode: str = "fixed_1") -> dict:
+    def reset(self, seed: int | None = None, mode: str = "fixed_1", *, render: bool = True) -> dict:
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
         if seed is not None:
@@ -162,7 +162,12 @@ class AlohaCanEnv:
         self.success = False
         mujoco.mj_forward(self.model, self.data)
         # Let the can settle on the bin floor while the arm holds home.
+        # PositionIkController already wrote a constant ctrl. A per-step
+        # controller instead refreshes and commands inside the loop; the
+        # PositionIk path is the original mj_step-only loop.
         for _ in range(50):
+            if self._uses_substep_controller():
+                self.controller.compute(self.model, self.data)
             mujoco.mj_step(self.model, self.data)
         # Settle integrates qpos but leaves xpos / contacts one step behind.
         # Sync before the observation reset returns. Success is not counted
@@ -170,17 +175,29 @@ class AlohaCanEnv:
         self._sync_derived()
         self.success = False
         self.tracker.reset()
-        return self.get_obs()
+        return self.get_obs(render=render)
 
     def step(
         self,
         action: np.ndarray,
         on_substep: Callable[[AlohaCanEnv], None] | None = None,
+        *,
+        render: bool = True,
     ) -> tuple[dict, bool, dict]:
-        self.controller.apply(self.model, self.data, action)
+        if self._uses_substep_controller():
+            self.controller.set_target(self.model, self.data, action)
+        else:
+            self.controller.apply(self.model, self.data, action)
         info = self._ik_info()
         for _ in range(self.n_substeps):
+            if self._uses_substep_controller():
+                # compute() refreshes qfrc_bias and M onto the current state,
+                # then writes ctrl. mj_step applies that ctrl. read_applied
+                # copies qfrc_actuator before _sync_derived replaces it.
+                self.controller.compute(self.model, self.data)
             mujoco.mj_step(self.model, self.data)
+            if self._uses_substep_controller() and hasattr(self.controller, "read_applied"):
+                self.controller.read_applied(self.model, self.data)
             # Success is evaluated once per physics step, on the post-step
             # state. mj_step has already integrated qpos and qvel, but xpos,
             # xmat, site_xpos and contacts still describe the pre-step
@@ -190,14 +207,24 @@ class AlohaCanEnv:
             self.success = self.tracker.update(self.can_center_base(), self.can_linvel(), released)
             if on_substep is not None:
                 on_substep(self)
-        return self.get_obs(), self.success, info
+        return self.get_obs(render=render), self.success, info
 
-    def get_obs(self) -> dict:
+    def _uses_substep_controller(self) -> bool:
+        ctrl = self.controller
+        return callable(getattr(ctrl, "set_target", None)) and callable(getattr(ctrl, "compute", None))
+
+    def get_obs(self, render: bool = True) -> dict:
         self._sync_derived()
         tcp_pos, tcp_quat = self._ik.site_pose_in_base(self.data)
+        if render:
+            agent = self.render("agentview")
+            wrist = self.render("wrist_cam_left")
+        else:
+            agent = np.zeros((self.image_height, self.image_width, 3), dtype=np.uint8)
+            wrist = np.zeros_like(agent)
         return {
-            "agentview": self.render("agentview"),
-            "wrist_cam_left": self.render("wrist_cam_left"),
+            "agentview": agent,
+            "wrist_cam_left": wrist,
             "tcp_pose": np.concatenate((tcp_pos, tcp_quat)),
             "gripper_opening": np.array([self.data.qpos[self.grip_qpos_adr]], dtype=float),
             "q": self.data.qpos[self.arm_qpos_adr].copy(),

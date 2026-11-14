@@ -1,4 +1,11 @@
-"""Swappable low-level controllers. M1 tracks a Cartesian target with position actuators."""
+"""Swappable low-level controllers.
+
+M1's :class:`PositionIkController` still applies one position command per 20 Hz
+action. Controllers that also implement ``set_target`` and ``compute`` are
+stepped by :meth:`aloha_pp.sim.env.AlohaCanEnv.step` once per physics step;
+that path is what M3 uses. ``PositionIkController`` does not grow those
+methods, so its reset / apply behaviour stays the one the M1 tests cover.
+"""
 
 from __future__ import annotations
 

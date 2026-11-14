@@ -1,0 +1,54 @@
+# M3 tracking experiment. Scene poses and the home joint vector live in
+# configs/m1_pick_place.yaml. Gains below are Kp = M_ii * omega^2 and
+# Kd = 2 * zeta * M_ii * omega at the home configuration with the gripper
+# open. M_ii is the diagonal of mj_fullM (armature included). Ki = Kp * omega / 10
+# is used only by C4. Tt for the record is 1/omega; C4 anti-windup is
+# conditional integration rather than back-calculation, so Tt is not applied.
+omega: 20.0
+zeta: 1.0
+ki_factor: 0.1
+m_diag: [0.1193751548, 0.6486375758, 0.5306768228, 0.1525371819, 0.0210357960, 0.0025998627]
+kp: [47.7500619248, 259.4550303195, 212.2707291057, 61.0148727528, 8.4143184166, 1.0399450846]
+kd: [4.7750061925, 25.9455030320, 21.2270729106, 6.1014872753, 0.8414318417, 0.1039945085]
+ki: [95.5001238495, 518.9100606390, 424.5414582115, 122.0297455056, 16.8286368331, 2.0798901693]
+
+# Menagerie position kp / kv, used only by the extra C2-versus-B1 run.
+menagerie_kp: [43.0, 265.0, 227.0, 78.0, 37.0, 10.4]
+menagerie_kv: [5.76, 20.0, 18.49, 6.78, 6.28, 1.2]
+
+ik_max_iters: 80
+ik_damping: 0.05
+ik_rot_weight: 0.4
+# Selected tolerance. The candidate list below is only a verification benchmark;
+# a slower timing result must not change the experiment.
+ik_pos_tol: 1.0e-4
+ik_rot_tol: 1.0e-3
+ik_candidates:
+  - {pos_tol: 1.0e-3, rot_tol: 1.0e-2}
+  - {pos_tol: 1.0e-4, rot_tol: 1.0e-3}
+
+# lookahead: one future knot, central velocity and acceleration, 100 ms total lag.
+# causal: current knot only, acceleration bounded by accel_limit, 50 ms pipeline lag.
+reference_scheme: lookahead
+# Half the static torque budget (0.5 * force_limit / M_ii). The causal scheme
+# and the velocity-limit fallback use it. A lookahead segment that already
+# respects v_max is not rewritten to this bound.
+accel_limit: [41.883, 15.417, 18.844, 32.779, 237.69, 769.27]
+
+pregrasp_clearance: 0.08
+lift_height: 0.10
+hold_s: 0.5
+ik_benchmark_time: 8.0
+
+contact:
+  xy: [0.24, 0.08]
+  above_z: 0.08
+  press_z: -0.01
+  descend_s: 1.0
+  press_s: 2.0
+  lift_s: 1.0
+  settle_s: 0.5
+
+video_max_mb: 2.0
+video_height: 180
+video_width: 240
