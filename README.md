@@ -20,13 +20,11 @@
   <tr>
     <td>其他示例<br>（初始位置不同）</td>
     <td><img src="media/dp_seed00.gif" width="256"><br>评测种子 0，成功，12.7 s（<a href="media/dp_seed00.mp4">mp4</a>）</td>
-    <td><img src="media/dsrl_val_seed20000.gif" width="256"><br>验证种子 20000，成功，8.8 s（<a href="media/dsrl_val_seed20000.mp4">mp4</a>）<br>与 ckpt_best 同一组权重，选模那次验证的录像</td>
+    <td><img src="media/dsrl_val_seed20000.gif" width="256"><br>验证种子 20000，成功，8.8 s（<a href="media/dsrl_val_seed20000.mp4">mp4</a>）</td>
   </tr>
 </table>
 
-在种子 0–49 上的正式评测（不录像）中，成功率分别为：BC（w = 0）36/50，DSRL 46/50，经典规划器 50/50。详见 [`report/report.md`](report/report.md) 第 8–9 节。
-
-> 视频仅作展示。在本机 GPU / EGL 下，录像会改变闭环轨迹，所以成功率以不录像的正式评测为准。
+在种子 0–49 上的正式评测（不录像）中，成功率分别为：BC（w = 0）36/50，DSRL 46/50，经典规划器 50/50。
 
 
 ## 1. 安装
@@ -127,10 +125,9 @@ conda run -n AIControl --no-capture-output python -u scripts/m7_eval.py \
 | `aloha/`、`assets/scene/` | 机器人模型（Menagerie ALOHA，已修复），Can 场景（robosuite，MIT 许可） |
 | `src/aloha_pp/` | `sim` 环境、`kin` / `dyn` 建模、`control` 底层控制、`planning` 规划器、`data` 示范、`policy` 扩散策略、`rl` DSRL |
 | `configs/` | 各阶段配置 |
-| `scripts/` | 实验、训练、评测、画图脚本，按里程碑编号 `m1_`–`m8_` |
+| `scripts/` | 实验、训练、评测、画图脚本 |
 | `tests/` | 单元与回归测试 |
-| `report/` | 技术报告。插图和视频运行 `scripts/m8_figures.py` 生成，不入 git |
-| `outputs/`、`datasets/` | 实验产物与数据，不入 git |
+| `outputs/`、`datasets/` | 实验产物与数据 |
 
 ## 5. 说明
 
