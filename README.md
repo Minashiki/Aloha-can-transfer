@@ -4,7 +4,7 @@
 
 ## 效果演示
 
-下面是同一随机初始位置（评测种子 0、1）下，Diffusion Policy（BC）与 DSRL 微调后策略的完整 pick & place 过程。画面为 agentview 相机，10 fps，实时速度。
+下面是 Diffusion Policy（BC）与 DSRL 微调后策略的完整 pick & place 过程。画面为 agentview 相机，10 fps，实时速度。
 
 <table>
   <tr>
@@ -13,14 +13,14 @@
     <th>DSRL（ckpt_best）</th>
   </tr>
   <tr>
-    <td>种子 0</td>
-    <td><img src="media/dp_seed00.gif" width="256"><br>成功，12.7 s（<a href="media/dp_seed00.mp4">mp4</a>）</td>
-    <td><img src="media/dsrl_seed00.gif" width="256"><br>成功，9.7 s（<a href="media/dsrl_seed00.mp4">mp4</a>）</td>
-  </tr>
-  <tr>
-    <td>种子 1</td>
+    <td>同一初始位置<br>（评测种子 1）</td>
     <td><img src="media/dp_seed01.gif" width="256"><br>成功，16.6 s（<a href="media/dp_seed01.mp4">mp4</a>）</td>
     <td><img src="media/dsrl_seed01.gif" width="256"><br>成功，8.7 s（<a href="media/dsrl_seed01.mp4">mp4</a>）</td>
+  </tr>
+  <tr>
+    <td>其他示例<br>（初始位置不同）</td>
+    <td><img src="media/dp_seed00.gif" width="256"><br>评测种子 0，成功，12.7 s（<a href="media/dp_seed00.mp4">mp4</a>）</td>
+    <td><img src="media/dsrl_val_seed20000.gif" width="256"><br>验证种子 20000，成功，8.8 s（<a href="media/dsrl_val_seed20000.mp4">mp4</a>）<br>与 ckpt_best 同一组权重，选模那次验证的录像</td>
   </tr>
 </table>
 
