@@ -1,0 +1,3 @@
+# 根目录 .gitignore 排除了 *.mp4 / *.gif；本目录是 README 用的演示视频，需要入库。
+!*.mp4
+!*.gif
