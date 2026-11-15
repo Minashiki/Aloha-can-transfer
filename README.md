@@ -32,9 +32,9 @@
 要求：Linux，NVIDIA GPU，驱动需支持 CUDA 13.2；已安装 conda。
 
 ```bash
-conda env create -f environment.yml        # 创建环境 AIControl（Python 3.12，torch 2.15.0+cu132，mujoco 3.17.0）
-conda run -n AIControl python -m pip install -e .
-conda run -n AIControl python scripts/check_env.py      # 检查 CUDA、离屏渲染（EGL）与模型加载
+conda env create -f environment.yml        # 创建环境 AlohaPAP（Python 3.12，torch 2.15.0+cu132，mujoco 3.17.0）
+conda run -n AlohaPAP python -m pip install -e .
+conda run -n AlohaPAP python scripts/check_env.py      # 检查 CUDA、离屏渲染（EGL）与模型加载
 ```
 
 - `pyproject.toml` 故意没有声明 torch，避免 `pip install -e .` 把 CUDA 版 torch 换成 CPU 版。torch 请只通过 `environment.yml` 安装。
@@ -43,7 +43,7 @@ conda run -n AIControl python scripts/check_env.py      # 检查 CUDA、离屏�
 可选：运行测试。
 
 ```bash
-conda run -n AIControl python -m pytest tests -q -p no:cacheprovider
+conda run -n AlohaPAP python -m pytest tests -q -p no:cacheprovider
 ```
 
 ## 2. 不训练，先看效果
@@ -51,8 +51,8 @@ conda run -n AIControl python -m pytest tests -q -p no:cacheprovider
 经典规划器加 C3 控制器，跑两组固定取放位置 × 三档速度，以及随机位置的成功率：
 
 ```bash
-conda run -n AIControl python -u scripts/m4_run.py
-conda run -n AIControl python -u scripts/m4_analyze.py
+conda run -n AlohaPAP python -u scripts/m4_run.py
+conda run -n AlohaPAP python -u scripts/m4_analyze.py
 ```
 
 结果写到 `outputs/m4/`，包括 `summary.md`、`figures/` 和 `videos/`。
@@ -70,9 +70,9 @@ mkdir -p datasets/robomimic/can/ph
 curl -L -o datasets/robomimic/can/ph/low_dim_v141.hdf5 \
   http://downloads.cs.stanford.edu/downloads/rt_benchmark/can/ph/low_dim_v141.hdf5
 
-conda run -n AIControl --no-capture-output python -u scripts/m5_generate.py            # 全部 200 条，约 9 分钟
+conda run -n AlohaPAP --no-capture-output python -u scripts/m5_generate.py            # 全部 200 条，约 9 分钟
 # Smoke：只处理前 20 条
-# conda run -n AIControl --no-capture-output python -u scripts/m5_generate.py --limit 20
+# conda run -n AlohaPAP --no-capture-output python -u scripts/m5_generate.py --limit 20
 ```
 
 输出是 `outputs/m5/dataset/demos.hdf5`。完整运行约得到 120 条成功示范；BC 默认从中抽 30 条训练。
@@ -83,16 +83,16 @@ conda run -n AIControl --no-capture-output python -u scripts/m5_generate.py     
 
 ```bash
 # Smoke（约 30 s）
-conda run -n AIControl --no-capture-output python -u scripts/m6_train.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m6_train.py \
   --config configs/m6_dp.yaml --out outputs/m6/smoke \
   --epochs 6 --warmup-epochs 0 --val-every 6 --n-val-episodes 1 --val-batches 2 --val-loss-every 1
 
 # 正式（2000 epoch，RTX 5080 上约 1.1 h）
-conda run -n AIControl --no-capture-output python -u scripts/m6_train.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m6_train.py \
   --config configs/m6_dp.yaml --out outputs/m6/train
 
 # 评测：种子 0–49；用 --out 指定评测目录（默认会为种子 0–3 录像）
-conda run -n AIControl --no-capture-output python -u scripts/m6_eval.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m6_eval.py \
   --checkpoint outputs/m6/train/ckpt_last.pt --out outputs/m6/train/eval
 ```
 
@@ -104,15 +104,15 @@ conda run -n AIControl --no-capture-output python -u scripts/m6_eval.py \
 
 ```bash
 # Smoke（4 个并行环境、280 个转移，加载完成后约十几秒）
-conda run -n AIControl --no-capture-output python -u scripts/m7_train.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m7_train.py \
   --config configs/m7_dsrl.yaml --smoke --out outputs/m7/smoke/train
 
 # 正式（2×10⁶ 环境转移，8 个并行环境，约 18 h）
-conda run -n AIControl --no-capture-output python -u scripts/m7_train.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m7_train.py \
   --config configs/m7_dsrl.yaml --out outputs/m7/train
 
 # 评测：按验证选出的 ckpt_best，种子 0–49，不录像
-conda run -n AIControl --no-capture-output python -u scripts/m7_eval.py \
+conda run -n AlohaPAP --no-capture-output python -u scripts/m7_eval.py \
   --method bc_dsrl --bc-checkpoint outputs/m6/train/ckpt_last.pt \
   --actor-checkpoint outputs/m7/train/ckpt_best.pt \
   --seeds 0-49 --videos none --out outputs/m7/eval_bc_dsrl_best

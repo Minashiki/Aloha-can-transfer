@@ -1,7 +1,7 @@
 # Recreate with: conda env create -f environment.yml
 # Then, from this repository: conda run -n AIControl python -m pip install -e .
 # torch is the CUDA 13.2 wheel (2.15.0+cu132). Do not install it from the default CPU index.
-name: AIControl
+name: AlohaPAP
 channels:
   - defaults
 dependencies:
