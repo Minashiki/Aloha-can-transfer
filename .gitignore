@@ -66,8 +66,7 @@ docs/PLAN.md
 docs/WORKFLOW.md
 docs/WORKFLOW_generic.md
 
-# ---- 交接单（仅本地保留，不入 git）----
-tasks/handover_*.md
+/tasks
 
 /report
 /report_agy
